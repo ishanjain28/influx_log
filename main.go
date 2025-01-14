@@ -152,7 +152,11 @@ func flatten(m map[string]interface{}, fields map[string]interface{}, prefix str
 	for k, v := range m {
 		key := prefix + k
 
-		if v2, ok := v.(map[string]interface{}); ok {
+		if v2, ok := v.([]interface{}); ok {
+			for i, v := range v2 {
+				fields[key+"_"+strconv.Itoa(i)] = v
+			}
+		} else if v2, ok := v.(map[string]interface{}); ok {
 			flatten(v2, fields, key+"_")
 		} else {
 			fields[key] = v
