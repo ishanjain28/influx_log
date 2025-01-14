@@ -154,6 +154,17 @@ func flatten(m map[string]interface{}, fields map[string]interface{}, prefix str
 		key := prefix + k
 
 		if v2, ok := v.([]interface{}); ok {
+			if len(v2) == 1 {
+				v20 := v2[0].(string)
+				if ni, err := strconv.ParseInt(v20, 10, 64); err == nil {
+					fields[key+"_0"] = ni
+				} else if nf, err := strconv.ParseFloat(v20, 64); err == nil {
+					fields[key+"_0"] = nf
+				}
+
+				fields[key+"_0"] = v20
+				continue
+			}
 			for i, v := range v2 {
 				fields[key+"_"+strconv.Itoa(i)] = v
 			}
