@@ -1,8 +1,11 @@
-module github.com/neodyme-labs/influx_log
+module github.com/ishanjain28/influx_log
 
 go 1.18
 
-require github.com/caddyserver/caddy/v2 v2.6.2
+require (
+	github.com/caddyserver/caddy/v2 v2.6.2
+	github.com/davecgh/go-spew v1.1.1
+)
 
 require (
 	github.com/fsnotify/fsnotify v1.5.1 // indirect

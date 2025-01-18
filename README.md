@@ -27,21 +27,22 @@ You can use this plugin with either a caddy.json or a Caddyfile here is an examp
 ## Caddyfile
 ```
 127.0.0.1 {
-	root * example
-	file_server
-	log {
-		format json
-		output influx_log {
-			token <token>
-			org my-org
-			bucket my-bucket
-			measurement l1
-			tags {
-				hostname {request_host}
-			}
-			host http://localhost:8086
-		}
-	}
+    root * example
+    file_server
+    log {
+        format json
+        output influx_log {
+            token <token>
+            org my-org
+            bucket my-bucket
+            measurement l1
+            tags {
+                hostname {request_host}
+            }
+            host http://localhost:8086
+            ignore_fields logger msg
+        }
+    }
 }
 ```
 
@@ -68,7 +69,8 @@ You can use this plugin with either a caddy.json or a Caddyfile here is an examp
                     "tags": {
                         "hostname": "{request_host}"
                     },
-                    "token": "<token>"
+                    "token": "<token>",
+                    "ignore_fields": ["logger", "msg"]
                 },
                 "include": [
                     "http.log.access"

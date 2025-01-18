@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
-	"time"
 	"strconv"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -26,6 +25,9 @@ type InfluxLog struct {
 	Bucket      string            `json:"bucket,omitempty"`
 	Measurement string            `json:"measurement,omitempty"`
 	Tags        map[string]string `json:"tags,omitempty"`
+
+	IgnoreFields []string `json:"ignore_fields,omitempty"`
+	ignoreFields map[string]struct{}
 
 	logger *zap.Logger
 }
@@ -53,6 +55,7 @@ func (l *InfluxLog) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	}
 
 	for nesting := d.Nesting(); d.NextBlock(nesting); {
+
 		switch d.Val() {
 		case "host":
 			if !d.NextArg() {
@@ -97,6 +100,20 @@ func (l *InfluxLog) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				tags[key] = d.Val()
 			}
 			l.Tags = tags
+
+		case "ignore_fields":
+			fields := map[string]struct{}{}
+
+			items := d.RemainingArgs()
+			if len(items) == 0 {
+				return d.ArgErr()
+			}
+
+			for _, v := range items {
+				fields[v] = struct{}{}
+			}
+
+			l.ignoreFields = fields
 		}
 	}
 
@@ -146,12 +163,23 @@ func (l *InfluxLog) Validate() error {
 		l.Tags = map[string]string{}
 	}
 
+	if l.ignoreFields == nil {
+		l.ignoreFields = map[string]struct{}{}
+	}
+	for _, v := range l.IgnoreFields {
+		l.ignoreFields[v] = struct{}{}
+	}
+
 	return nil
 }
 
-func flatten(m map[string]interface{}, fields map[string]interface{}, prefix string) map[string]interface{} {
+func flatten(m map[string]interface{}, fields map[string]interface{}, ignore map[string]struct{}, prefix string) map[string]interface{} {
 	for k, v := range m {
 		key := prefix + k
+
+		if _, ok := ignore[key]; ok {
+			continue
+		}
 
 		if v2, ok := v.([]interface{}); ok {
 			for i, v := range v2 {
@@ -169,20 +197,22 @@ func flatten(m map[string]interface{}, fields map[string]interface{}, prefix str
 				}
 			}
 		} else if v2, ok := v.(map[string]interface{}); ok {
-			flatten(v2, fields, key+"_")
+			flatten(v2, fields, ignore, key+"_")
 		} else {
 			fields[key] = v
 		}
 	}
+
 	return m
 }
 
 type InfluxWriter struct {
-	logger      *zap.Logger
-	measurement string
-	tags        map[string]string
-	client      influxdb2.Client
-	writeAPI    api.WriteAPI
+	logger       *zap.Logger
+	measurement  string
+	tags         map[string]string
+	ignoreFields map[string]struct{}
+	client       influxdb2.Client
+	writeAPI     api.WriteAPI
 }
 
 func (prom *InfluxWriter) Write(p []byte) (n int, err error) {
@@ -192,25 +222,39 @@ func (prom *InfluxWriter) Write(p []byte) (n int, err error) {
 	}
 
 	fields := map[string]interface{}{}
-	flatten(f, fields, "")
+	flatten(f, fields, prom.ignoreFields, "")
 
 	tags := map[string]string{}
 	for key, element := range prom.tags {
 		val := element
-		if strings.HasPrefix(element, "{") && strings.HasSuffix(element, "}") {
-			if v, ok := fields[element[1:len(element)-1]]; ok {
-				switch x := v.(type) {
-				case string:
-					val = x
-				default:
-					b, err := json.Marshal(x)
-					if err != nil {
-						prom.logger.Error("Marshal failed on log", zap.Error((err)))
-					}
 
-					val = string(b)
-				}
+		isTemplate := len(element) > 0 && element[0] == '{' && element[len(element)-1] == '}'
+		if !isTemplate {
+			tags[key] = val
+			continue
+		}
+
+		templateName := element[1 : len(element)-1]
+		value, ok := fields[templateName]
+		if !ok {
+			continue
+		}
+
+		switch x := value.(type) {
+		case string:
+			val = x
+		case float64:
+			val = strconv.FormatFloat(x, 'f', -1, 64)
+		case int64:
+			val = strconv.FormatInt(x, 10)
+		default:
+			b, err := json.Marshal(x)
+			if err != nil {
+				prom.logger.Error("marshal failed on log", zap.Error(err))
+				continue
 			}
+
+			val = string(b)
 		}
 
 		tags[key] = val
@@ -239,6 +283,7 @@ func (prom *InfluxWriter) Open(i *InfluxLog) error {
 	prom.client = client
 	prom.writeAPI = writeAPI
 	prom.measurement = i.Measurement
+	prom.ignoreFields = i.ignoreFields
 	prom.tags = i.Tags
 
 	return nil
