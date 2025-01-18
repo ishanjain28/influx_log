@@ -109,7 +109,7 @@
                   CONFIG_PATH="$(mktemp -d)"
 
                   xcaddy version
-                  xcaddy build --with github.com/neodyme-labs/influx_log=.
+                  xcaddy build --with github.com/ishanjain28/influx_log=.
 
                   ${pkgs.tmux}/bin/tmux new-session -s development -d
                   ${pkgs.tmux}/bin/tmux split-window -h

@@ -16,7 +16,7 @@ $ go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 Then build Caddy with this Go module plugged in. For example:
 
 ```shell
-$ xcaddy build --with github.com/neodyme-labs/influx_log
+$ xcaddy build --with github.com/ishanjain28/influx_log
 ```
 
 # Usage
